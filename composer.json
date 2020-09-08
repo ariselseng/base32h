@@ -1,0 +1,19 @@
+{
+    "name": "ariselseng/base32h",
+    "description": "Library to encode/decode numbers in Base32H",
+    "license": "MIT",
+    "minimum-stability": "stable",
+    "autoload": {
+        "psr-4": {
+            "Ariselseng\\Base32H\\": "src/"
+        }
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.3"
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Ariselseng\\Base32H\\Tests\\": "tests/"
+        }
+    }
+}
