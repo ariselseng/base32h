@@ -56,6 +56,42 @@ class Base32H
     }
 
     /**
+     * @param int[]|string $input
+     * @return string
+     */
+    public static function EncodeBin($input)
+    {
+        if (is_string($input)) {
+            $input = array_map(function ($character) {
+                return ord($character);
+            }, str_split($input, 1));
+        }
+
+        $encodedFull = '';
+
+        $overflow = count($input) % 5;
+        if ($overflow) {
+            $neededSize = (count($input) + (5 - $overflow));
+            $input = array_pad($input, $neededSize * -1, 0);
+        }
+
+        for ($i = 0; $i < count($input); $i += 5) {
+            $byteSegment = array_slice($input, $i, $i + 5);
+            $IntSegment =
+                $byteSegment[0] * 2 ** 32 +
+                $byteSegment[1] * 2 ** 24 +
+                $byteSegment[2] * 2 ** 16 +
+                $byteSegment[3] * 2 ** 8 +
+                $byteSegment[4];
+
+            $encodedSegment = self::Encode($IntSegment);
+            $encodedFull .= str_pad($encodedSegment, 8, '0', STR_PAD_LEFT);
+        }
+
+        return $encodedFull;
+    }
+
+    /**
      * @param string $character
      * @return int
      */
