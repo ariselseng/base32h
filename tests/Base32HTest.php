@@ -37,4 +37,11 @@ class Base32HTest extends TestCase
         $this->assertEquals('017L6N9M99M6YVAFF5CKGJKA6HNM0YAR', Base32H::EncodeBin('OCY5JjomOyY8Jj4mPyY'));
     }
 
+    public function testDecodeBin()
+    {
+        $this->assertEquals([255, 255, 255, 255, 255], Base32H::DecodeBin('ZZZZZZZZ'));
+        $this->assertEquals([0, 0, 0, 0, 255], Base32H::DecodeBin('0000007Z'));
+        $this->assertEquals([0, 79, 67, 89, 53, 74, 106, 111, 109, 79, 121, 89, 56, 74, 106, 52, 109, 80, 121, 89], Base32H::DecodeBin('017L6N9M99M6YVAFF5CKGJKA6HNM0YAR'));
+    }
+
 }

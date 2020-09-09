@@ -129,4 +129,25 @@ class Base32H
 
         return $decoded;
     }
+
+    /**
+     * @param string $input
+     * @return int[]
+     */
+    public static function DecodeBin(string $input)
+    {
+        $input = str_pad($input, 8, '0', STR_PAD_LEFT);
+        $byteArray = [];
+        for ($i = 0; $i < strlen($input); $i += 8) {
+            $decoded = self::Decode(substr($input, $i, 8));
+            $paddedVal = str_pad(base_convert($decoded, 10, 16), 10, '0', STR_PAD_LEFT);
+            $byteArray[] = (int)base_convert(substr($paddedVal, 0, 2), 16, 10);
+            $byteArray[] = (int)base_convert(substr($paddedVal, 2, 2), 16, 10);
+            $byteArray[] = (int)base_convert(substr($paddedVal, 4, 2), 16, 10);
+            $byteArray[] = (int)base_convert(substr($paddedVal, 6, 2), 16, 10);
+            $byteArray[] = (int)base_convert(substr($paddedVal, 8, 2), 16, 10);
+        }
+
+        return $byteArray;
+    }
 }
