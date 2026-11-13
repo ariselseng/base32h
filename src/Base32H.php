@@ -1,12 +1,15 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Ariselseng\Base32H;
 
+use InvalidArgumentException;
+use OverflowException;
 
 class Base32H
 {
-
-    const DIGITS = [
+    public const DIGITS = [
         '0Oo',
         '1Ii',
         '2',
@@ -41,113 +44,136 @@ class Base32H
         'Zz',
     ];
 
-    /**
-     * @param int $input
-     * @return string
-     */
-    public static function Encode(int $input)
+    /** @var array<string, int>|null */
+    private static ?array $digitValues = null;
+
+    public static function Encode(int $input): string
     {
-        $out = [];
-        while ($input) {
-            array_unshift($out, self::DIGITS[$input % 32][0]);
-            $input = (int)($input / 32);
+        if ($input < 0) {
+            throw new InvalidArgumentException('Base32H cannot encode negative numbers');
         }
-        return join('', $out);
+
+        if ($input === 0) {
+            return self::DIGITS[0][0];
+        }
+
+        $out = '';
+        while ($input > 0) {
+            $out = self::DIGITS[$input % 32][0] . $out;
+            $input = intdiv($input, 32);
+        }
+
+        return $out;
     }
 
     /**
-     * @param int[]|string $input
-     * @return string
+     * @param int[]|string $input bytes as integers 0-255, or a binary string
      */
-    public static function EncodeBin($input)
+    public static function EncodeBin(array|string $input): string
     {
         if (is_string($input)) {
-            $input = array_map(function ($character) {
-                return ord($character);
-            }, str_split($input, 1));
+            $input = $input === '' ? [] : array_values(unpack('C*', $input));
         }
 
-        $encodedFull = '';
+        foreach ($input as $byte) {
+            if (!is_int($byte) || $byte < 0 || $byte > 255) {
+                throw new InvalidArgumentException('Base32H::EncodeBin expects bytes in the range 0-255');
+            }
+        }
 
         $overflow = count($input) % 5;
         if ($overflow) {
-            $neededSize = (count($input) + (5 - $overflow));
-            $input = array_pad($input, $neededSize * -1, 0);
+            $input = array_merge(array_fill(0, 5 - $overflow, 0), array_values($input));
         }
 
-        for ($i = 0; $i < count($input); $i += 5) {
-            $byteSegment = array_slice($input, $i, $i + 5);
-            $IntSegment =
-                $byteSegment[0] * 2 ** 32 +
-                $byteSegment[1] * 2 ** 24 +
-                $byteSegment[2] * 2 ** 16 +
-                $byteSegment[3] * 2 ** 8 +
-                $byteSegment[4];
+        $encoded = '';
+        foreach (array_chunk($input, 5) as $segment) {
+            $value = ($segment[0] << 32)
+                | ($segment[1] << 24)
+                | ($segment[2] << 16)
+                | ($segment[3] << 8)
+                | $segment[4];
 
-            $encodedSegment = self::Encode($IntSegment);
-            $encodedFull .= str_pad($encodedSegment, 8, '0', STR_PAD_LEFT);
+            $encoded .= str_pad(self::Encode($value), 8, '0', STR_PAD_LEFT);
         }
 
-        return $encodedFull;
+        return $encoded;
     }
 
     /**
-     * @param string $character
-     * @return int
+     * Characters that are not Base32H digits (e.g. separators) are ignored.
      */
-    private static function decodeCharacter(string $character)
-    {
-        foreach (self::DIGITS as $key => $digit) {
-            if (strpos($digit, $character) !== false) {
-                return $key;
-            }
-        }
-
-        return -1;
-    }
-
-    /**
-     * @param string $input
-     * @return int
-     */
-    public static function Decode(string $input)
+    public static function Decode(string $input): int
     {
         $decoded = 0;
-        $count = 0;
-        $charactersArray = array_reverse(str_split($input, 1));
+        foreach (str_split(self::clean($input)) as $character) {
+            $digit = self::digitValues()[$character];
 
-        foreach ($charactersArray as $character) {
-            $digit = self::decodeCharacter($character);
-
-            if ($digit === -1) {
-                continue;
+            if ($decoded > intdiv(PHP_INT_MAX - $digit, 32)) {
+                throw new OverflowException('Base32H value does not fit in an integer');
             }
 
-            $decoded += $digit * 32 ** $count;
-            $count += 1;
+            $decoded = $decoded * 32 + $digit;
         }
 
         return $decoded;
     }
 
     /**
-     * @param string $input
+     * Characters that are not Base32H digits (e.g. separators) are ignored.
+     *
      * @return int[]
      */
-    public static function DecodeBin(string $input)
+    public static function DecodeBin(string $input): array
     {
-        $input = str_pad($input, 8, '0', STR_PAD_LEFT);
-        $byteArray = [];
-        for ($i = 0; $i < strlen($input); $i += 8) {
-            $decoded = self::Decode(substr($input, $i, 8));
-            $paddedVal = str_pad(base_convert($decoded, 10, 16), 10, '0', STR_PAD_LEFT);
-            $byteArray[] = (int)base_convert(substr($paddedVal, 0, 2), 16, 10);
-            $byteArray[] = (int)base_convert(substr($paddedVal, 2, 2), 16, 10);
-            $byteArray[] = (int)base_convert(substr($paddedVal, 4, 2), 16, 10);
-            $byteArray[] = (int)base_convert(substr($paddedVal, 6, 2), 16, 10);
-            $byteArray[] = (int)base_convert(substr($paddedVal, 8, 2), 16, 10);
+        $input = self::clean($input);
+        if ($input === '') {
+            return [];
         }
 
-        return $byteArray;
+        $overflow = strlen($input) % 8;
+        if ($overflow) {
+            $input = str_repeat('0', 8 - $overflow) . $input;
+        }
+
+        $bytes = [];
+        foreach (str_split($input, 8) as $segment) {
+            $value = self::Decode($segment);
+            for ($shift = 32; $shift >= 0; $shift -= 8) {
+                $bytes[] = ($value >> $shift) & 0xFF;
+            }
+        }
+
+        return $bytes;
+    }
+
+    /**
+     * Removes every character that is not a Base32H digit.
+     */
+    private static function clean(string $input): string
+    {
+        $values = self::digitValues();
+
+        return implode('', array_filter(
+            $input === '' ? [] : str_split($input),
+            static fn (string $character): bool => isset($values[$character])
+        ));
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    private static function digitValues(): array
+    {
+        if (self::$digitValues === null) {
+            self::$digitValues = [];
+            foreach (self::DIGITS as $value => $characters) {
+                foreach (str_split($characters) as $character) {
+                    self::$digitValues[$character] = $value;
+                }
+            }
+        }
+
+        return self::$digitValues;
     }
 }

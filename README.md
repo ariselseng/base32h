@@ -8,3 +8,4 @@ composer require ariselseng/base32h
 ```php
 Base32H::encode(1234567890) === '14RC0NJ'
 Base32H::decode('L') === 20
+```
